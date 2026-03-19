@@ -1,9 +1,113 @@
+"use client";
+
+import { useState } from "react";
+import { JapanMap } from "@/components/JapanMap";
+import { MemberPanel } from "@/components/MemberPanel";
+import { NewsPanel } from "@/components/NewsPanel";
+import { Header } from "@/components/Header";
+import {
+  useSingleSeatMembers,
+  useProportionalMembers,
+} from "@/hooks/useMembers";
+import { useNewsData } from "@/hooks/useNewsData";
+
 export default function Home() {
+  const [mode, setMode] = useState<"single-seat" | "proportional">(
+    "single-seat",
+  );
+  const [selectedPrefecture, setSelectedPrefecture] = useState<string | null>(
+    null,
+  );
+  const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
+
+  const {
+    members,
+    isLoading: loadingSingle,
+    error: errorSingle,
+  } = useSingleSeatMembers();
+  const {
+    members: proportionalMembers,
+    isLoading: loadingProp,
+    error: errorProp,
+  } = useProportionalMembers();
+
+  const {
+    filteredNews,
+    isLoading: loadingNews,
+    error: errorNews,
+    lastUpdated,
+    refresh,
+    filterByCategory,
+    selectedCategory,
+  } = useNewsData();
+
+  const isLoading = loadingSingle || loadingProp;
+  const error = errorSingle || errorProp;
+  const totalCount = members.length + proportionalMembers.length;
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-slate-900">
+        <div className="text-cyan-400 text-xl">読み込み中...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-slate-900">
+        <div className="text-red-400 text-xl">エラー: {error.message}</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="h-screen w-screen flex items-center justify-center bg-slate-900">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold text-cyan-400 mb-4">Lawmakers Vision</h1>
-        <p className="text-slate-400">🚧 セットアップ中...</p>
+    <div className="h-screen w-screen flex flex-col bg-slate-900">
+      <Header
+        mode={mode}
+        onModeChange={(newMode) => {
+          setMode(newMode);
+          setSelectedPrefecture(null);
+          setSelectedBlock(null);
+        }}
+        totalCount={totalCount}
+      />
+
+      <div className="flex flex-1 min-h-0">
+        {/* 地図エリア */}
+        <div className="flex-1 flex items-center justify-center p-4">
+          <JapanMap
+            members={members}
+            proportionalMembers={proportionalMembers}
+            selectedPrefecture={selectedPrefecture}
+            onSelectPrefecture={setSelectedPrefecture}
+            selectedBlock={selectedBlock}
+            onSelectBlock={setSelectedBlock}
+            mode={mode}
+            news={filteredNews}
+          />
+        </div>
+
+        {/* 議員パネル */}
+        <MemberPanel
+          selectedPrefecture={selectedPrefecture}
+          selectedBlock={selectedBlock}
+          members={members}
+          proportionalMembers={proportionalMembers}
+          mode={mode}
+          news={filteredNews}
+        />
+
+        {/* ニュースパネル */}
+        <NewsPanel
+          news={filteredNews}
+          isLoading={loadingNews}
+          error={errorNews}
+          lastUpdated={lastUpdated}
+          selectedCategory={selectedCategory}
+          onCategoryChange={filterByCategory}
+          onRefresh={refresh}
+        />
       </div>
     </div>
   );
