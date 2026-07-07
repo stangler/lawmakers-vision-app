@@ -8,15 +8,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Resend({
       apiKey: process.env.RESEND_API_KEY,
-      from: process.env.EMAIL_FROM ?? "noreply@example.com",
+      from:
+        process.env.EMAIL_FROM ??
+        process.env.RESEND_FROM_EMAIL ??
+        "noreply@example.com",
 
       // ─── マジックリンクのメール本文をカスタマイズ ───
       sendVerificationRequest: async ({ identifier: email, url, provider }) => {
+        // 開発環境: APIキーがない場合はコンソールに出力
+        if (!provider.apiKey && process.env.NODE_ENV === "development") {
+          console.log(
+            JSON.stringify({
+              event: "magic_link_dev",
+              to: email.replace(/(.{2})(.*)(@.*)/, "$1***$3"),
+              url,
+              timestamp: new Date().toISOString(),
+            }),
+          );
+          return;
+        }
+
         const { Resend: ResendClient } = await import("resend");
         const client = new ResendClient(provider.apiKey);
 
+        const fromEmail = provider.from || "noreply@example.com";
         const result = await client.emails.send({
-          from: provider.from,
+          from: fromEmail,
           to: email,
           subject: "ログインリンク - 国会議員ビジョン",
           html: buildEmailHtml(url),
@@ -25,7 +42,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (result.error) {
           throw new Error(
-            `Resend でメール送信に失敗しました: ${JSON.stringify(result.error)}`
+            `Resend でメール送信に失敗しました: ${JSON.stringify(result.error)}`,
           );
         }
       },
@@ -36,7 +53,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: {
     strategy: "database",
     maxAge: 30 * 24 * 60 * 60, // 30日
-    updateAge: 24 * 60 * 60,   // 24時間ごとに更新
+    updateAge: 24 * 60 * 60, // 24時間ごとに更新
   },
 
   // ─── ページ ─────────────────────────────────────────────────
@@ -49,9 +66,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // ─── コールバック ────────────────────────────────────────────
   callbacks: {
     async session({ session, user }) {
-      // セッションオブジェクトにユーザーIDを追加
+      // デバッグログ
+      if (process.env.NODE_ENV === "development") {
+        console.log("[Session Callback]", {
+          userId: user.id,
+          userEmailVerified: user.emailVerified,
+          sessionUserId: session.user?.id,
+          sessionEmailVerified: session.user?.emailVerified,
+        });
+      }
+
+      // セッションオブジェクトにユーザーIDとメール認証状態を追加
       if (session.user) {
         session.user.id = user.id;
+        session.user.emailVerified = user.emailVerified;
       }
       return session;
     },
